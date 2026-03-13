@@ -4,4 +4,4 @@ Description=RAID check with media-aware concurrency limits
 [Service]
 Type=oneshot
 EnvironmentFile=-/etc/default/raid-check-serial
-ExecStart=/usr/local/sbin/raid-check-serial.sh
+ExecStart=/usr/sbin/raid-check-serial.sh

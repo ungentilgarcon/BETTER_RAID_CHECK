@@ -1,0 +1,231 @@
+#!/bin/sh
+set -e
+
+START_NOW=0
+
+is_non_negative_int() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_positive_int() {
+  case "$1" in
+    ''|0|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+is_interval_spec() {
+  case "$1" in
+    *d|*M) ;;
+    *) return 1 ;;
+  esac
+  count=${1%[dM]}
+  is_positive_int "$count"
+}
+
+to_zero_one() {
+  case "$1" in
+    true|1|yes|on) printf '%s\n' 1 ;;
+    *) printf '%s\n' 0 ;;
+  esac
+}
+
+db_get_or_default() {
+  question="$1"
+  fallback="$2"
+  if [ -r /usr/share/debconf/confmodule ]; then
+    db_get "$question" || true
+    value="$RET"
+  else
+    value=""
+  fi
+
+  if [ -n "$value" ]; then
+    printf '%s\n' "$value"
+  else
+    printf '%s\n' "$fallback"
+  fi
+}
+
+month_list_for_step() {
+  step="$1"
+  m=1
+  list=""
+  while [ "$m" -le 12 ]; do
+    mm="$(printf '%02d' "$m")"
+    if [ -n "$list" ]; then
+      list="$list,$mm"
+    else
+      list="$mm"
+    fi
+    m=$((m + step))
+  done
+  printf '%s\n' "$list"
+}
+
+write_timer_override() {
+  interval="$1"
+  timer_override_dir="/etc/systemd/system/raid-check-serial.timer.d"
+  timer_override_file="$timer_override_dir/override.conf"
+  count=${interval%[dM]}
+  unit=${interval#${interval%?}}
+
+  mkdir -p "$timer_override_dir"
+
+  if [ "$unit" = "d" ]; then
+    cat > "$timer_override_file" <<EOF
+[Timer]
+OnCalendar=
+OnUnitActiveSec=${count}d
+OnBootSec=15min
+EOF
+    return 0
+  fi
+
+  if [ "$count" = "1" ]; then
+    rm -f "$timer_override_file"
+    rmdir "$timer_override_dir" 2>/dev/null || true
+    return 0
+  fi
+
+  if [ "$count" -ge 2 ] && [ "$count" -le 12 ]; then
+    month_list="$(month_list_for_step "$count")"
+    cat > "$timer_override_file" <<EOF
+[Timer]
+OnUnitActiveSec=
+OnCalendar=
+OnCalendar=*-${month_list}-01 03:00:00
+EOF
+    return 0
+  fi
+
+  cat > "$timer_override_file" <<EOF
+[Timer]
+OnCalendar=
+OnUnitActiveSec=${count}month
+OnBootSec=15min
+EOF
+}
+
+disable_conflicting_systemd_timers() {
+  command -v systemctl >/dev/null 2>&1 || return 0
+
+  timers="$({
+    for t in mdcheck_start.timer mdcheck_continue.timer mdcheck.timer; do
+      if systemctl list-unit-files --type=timer --no-legend --no-pager 2>/dev/null | awk '{print $1}' | grep -Fxq "$t"; then
+        printf '%s\n' "$t"
+      fi
+    done
+
+    systemctl list-unit-files --type=timer --no-legend --no-pager 2>/dev/null |
+      awk '{print $1}' |
+      grep -Ei '(^|[-_])(md|raid).*?(check|scrub)|(^|[-_])(check|scrub).*?(md|raid)' || true
+  } | awk 'NF' | sort -u)"
+
+  [ -n "$timers" ] || return 0
+
+  printf '%s\n' "$timers" | while IFS= read -r timer; do
+    [ -n "$timer" ] || continue
+    [ "$timer" = "raid-check-serial.timer" ] && continue
+    systemctl disable --now "$timer" >/dev/null 2>&1 || true
+    systemctl mask "$timer" >/dev/null 2>&1 || true
+  done
+}
+
+disable_conflicting_cron_jobs() {
+  for f in /etc/crontab /etc/anacrontab; do
+    [ -f "$f" ] || continue
+    if grep -Eiq 'checkarray|mdcheck|(^|[^a-z])raid[-_ ]?check([^a-z]|$)' "$f"; then
+      backup="$f.raid-check-serial.bak.$(date +%Y%m%d%H%M%S)"
+      cp -a "$f" "$backup"
+      sed -E -i '/checkarray|mdcheck|(^|[^a-z])raid[-_ ]?check([^a-z]|$)/I {
+        /disabled-by-raid-check-serial/I! s/^/# disabled-by-raid-check-serial: /
+      }' "$f"
+    fi
+  done
+
+  for dir in /etc/cron.d /etc/cron.daily /etc/cron.weekly /etc/cron.hourly /etc/cron.monthly; do
+    [ -d "$dir" ] || continue
+    find "$dir" -maxdepth 1 -type f 2>/dev/null | while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      case "$f" in
+        *.disabled-by-raid-check-serial) continue ;;
+      esac
+      if grep -Eiq 'checkarray|mdcheck|(^|[^a-z])raid[-_ ]?check([^a-z]|$)' "$f"; then
+        mv "$f" "$f.disabled-by-raid-check-serial"
+      fi
+    done
+  done
+}
+
+apply_config=0
+if [ "$1" = "configure" ]; then
+  if [ -z "${2:-}" ] || [ "${DEBCONF_RECONFIGURE:-0}" = "1" ] || [ ! -f /etc/default/raid-check-serial ]; then
+    apply_config=1
+  fi
+fi
+
+if [ -r /usr/share/debconf/confmodule ]; then
+  . /usr/share/debconf/confmodule
+  db_version 2.0 || true
+fi
+
+if [ "$apply_config" -eq 1 ]; then
+  CHECK_INTERVAL="$(db_get_or_default better-raid-check/check_interval 1M)"
+  HDD_LIMIT="$(db_get_or_default better-raid-check/hdd_limit 1)"
+  SSD_LIMIT="$(db_get_or_default better-raid-check/ssd_limit 1)"
+  NVM_LIMIT="$(db_get_or_default better-raid-check/nvm_limit 1)"
+  MERGE_SSD_NVM="$(to_zero_one "$(db_get_or_default better-raid-check/merge_ssd_nvm false)")"
+  SLEEP_SECS="$(db_get_or_default better-raid-check/sleep_secs 20)"
+  DRY_RUN="$(to_zero_one "$(db_get_or_default better-raid-check/dry_run false)")"
+  DISABLE_CONFLICTS="$(to_zero_one "$(db_get_or_default better-raid-check/disable_conflicts true)")"
+  START_NOW="$(to_zero_one "$(db_get_or_default better-raid-check/start_now false)")"
+
+  is_interval_spec "$CHECK_INTERVAL" || CHECK_INTERVAL="1M"
+  is_non_negative_int "$HDD_LIMIT" || HDD_LIMIT="1"
+  is_non_negative_int "$SSD_LIMIT" || SSD_LIMIT="1"
+  is_non_negative_int "$NVM_LIMIT" || NVM_LIMIT="1"
+  is_positive_int "$SLEEP_SECS" || SLEEP_SECS="20"
+
+  cat > /etc/default/raid-check-serial <<EOF
+SLEEP_SECS=$SLEEP_SECS
+DRY_RUN=$DRY_RUN
+MAX_HDD_CONCURRENT=$HDD_LIMIT
+MAX_SSD_CONCURRENT=$SSD_LIMIT
+MAX_NVM_CONCURRENT=$NVM_LIMIT
+MERGE_SSD_NVM_CLASSES=$MERGE_SSD_NVM
+MAX_ROTATIONAL_CONCURRENT=$HDD_LIMIT
+MAX_NVME_CONCURRENT=$NVM_LIMIT
+EOF
+
+  if [ "$CHECK_INTERVAL" = "1M" ]; then
+    rm -f /etc/systemd/system/raid-check-serial.timer.d/override.conf
+    rmdir /etc/systemd/system/raid-check-serial.timer.d 2>/dev/null || true
+  else
+    write_timer_override "$CHECK_INTERVAL"
+  fi
+
+  if [ "$DISABLE_CONFLICTS" = "1" ]; then
+    disable_conflicting_systemd_timers
+    disable_conflicting_cron_jobs
+  fi
+fi
+
+#DEBHELPER#
+
+if [ "$1" = "configure" ] && [ "$apply_config" -eq 1 ] && [ "$START_NOW" = "1" ]; then
+  if command -v deb-systemd-invoke >/dev/null 2>&1; then
+    deb-systemd-invoke start raid-check-serial.service >/dev/null 2>&1 || true
+  elif command -v systemctl >/dev/null 2>&1; then
+    systemctl start --no-block raid-check-serial.service >/dev/null 2>&1 || true
+  fi
+fi
+
+if [ -r /usr/share/debconf/confmodule ]; then
+  db_stop || true
+fi
+
+exit 0

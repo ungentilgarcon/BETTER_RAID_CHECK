@@ -1,0 +1,15 @@
+Source: better-raid-check
+Section: admin
+Priority: optional
+Maintainer: better-raid-check maintainers <maintainers@example.com>
+Build-Depends: debhelper-compat (= 13), po-debconf
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+
+Package: better-raid-check
+Architecture: all
+Depends: ${misc:Depends}, mdadm, systemd | systemd-sysv, debconf (>= 0.5) | debconf-2.0
+Description: Media-aware MD RAID check scheduler with per-class concurrency
+ Schedules and runs MD RAID check operations with configurable concurrency
+ per media class (HDD/SSD/NVM), with conflict protection against other
+ RAID check schedulers.

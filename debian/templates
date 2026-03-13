@@ -1,0 +1,60 @@
+Template: better-raid-check/check_interval
+Type: string
+Default: 1M
+_Description: RAID check interval:
+ Enter interval as Xd (days) or XM (months), for example 30d, 60d, 1M, 2M.
+
+Template: better-raid-check/hdd_limit
+Type: string
+Default: 1
+_Description: Maximum concurrent HDD or mixed RAID checks:
+ How many HDD or mixed-media arrays may be checked in parallel.
+
+Template: better-raid-check/ssd_limit
+Type: string
+Default: 1
+_Description: Maximum concurrent SSD RAID checks:
+ How many SSD arrays may be checked in parallel.
+
+Template: better-raid-check/nvm_limit
+Type: string
+Default: 1
+_Description: Maximum concurrent NVM RAID checks:
+ How many NVM (NVMe) arrays may be checked in parallel.
+
+Template: better-raid-check/merge_ssd_nvm
+Type: boolean
+Default: false
+_Description: Treat SSD and NVM as one scheduling class?
+ If enabled, pure NVM arrays are handled as SSD class for scheduling.
+
+Template: better-raid-check/sleep_secs
+Type: string
+Default: 20
+_Description: Poll interval in seconds:
+ Delay between status checks while a RAID check run is active.
+
+Template: better-raid-check/dry_run
+Type: boolean
+Default: false
+_Description: Enable dry-run mode by default?
+ If enabled, actions are logged but sync_action is not modified.
+
+Template: better-raid-check/disable_conflicts
+Type: boolean
+Default: true
+_Description: Disable conflicting RAID-check cron or timer jobs?
+ If enabled, known mdadm/mdcheck and similar RAID check schedulers are disabled.
+
+Template: better-raid-check/start_now
+Type: boolean
+Default: false
+_Description: Start a RAID check immediately after install?
+ If enabled, one RAID check run starts now in addition to timer scheduling.
+
+Template: better-raid-check/interval_risk_confirm
+Type: boolean
+Default: false
+_Description: Keep an interval longer than two months?
+ Scheduling checks less often than every two months increases the chance
+ that corruption remains undetected longer.

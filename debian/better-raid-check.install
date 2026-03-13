@@ -1,0 +1,3 @@
+raid-check-serial.sh usr/sbin/
+raid-check-serial.service usr/lib/systemd/system/
+raid-check-serial.timer usr/lib/systemd/system/

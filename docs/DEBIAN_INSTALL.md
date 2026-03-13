@@ -100,20 +100,30 @@ sudo systemctl status raid-check-serial.service
 - Mixed non-rotational arrays (SSD + NVMe) are treated as `ssd` for conservative scheduling.
 - Installer disables and masks conflicting RAID-check timers and cron entries by default.
 
-## Build a Debian Package
+## Build Debian Packages
 
-Build a `.deb` artifact from this repository:
+Build a binary package:
 
 ```bash
-./build-deb.sh --version 1.0.0
+dpkg-buildpackage -us -uc -b
 ```
 
-The package is created under `dist/`.
-
-Install it:
+Build a source package (for mentors upload):
 
 ```bash
-sudo dpkg -i dist/better-raid-check_<version>_all.deb
+dpkg-buildpackage -us -uc -S -sa
+```
+
+Optional wrapper that copies artifacts to `dist/`:
+
+```bash
+./build-deb.sh
+```
+
+Install binary package:
+
+```bash
+sudo dpkg -i ../better-raid-check_<version>_all.deb
 ```
 
 ## Interactive Package Configuration
@@ -134,6 +144,7 @@ Safety warning:
 Non-interactive installs:
 
 - If `DEBIAN_FRONTEND=noninteractive` is used, package defaults are applied unless preseeds are provided.
+- Upgrades do not force prompts; run `dpkg-reconfigure better-raid-check` to change values.
 
 Reconfigure later:
 
@@ -145,3 +156,24 @@ sudo dpkg-reconfigure better-raid-check
 
 - Package includes GPL-3+ licensing metadata in `/usr/share/doc/better-raid-check/copyright`.
 - `LICENSE` is installed under `/usr/share/doc/better-raid-check/LICENSE`.
+
+## QA and Upload
+
+Run QA checks:
+
+```bash
+lintian -iIE --pedantic ../better-raid-check_*.changes ../better-raid-check_*.dsc
+```
+
+Push source to Salsa/Git:
+
+```bash
+git remote add salsa git@salsa.debian.org:<team-or-user>/better-raid-check.git
+git push -u salsa main
+```
+
+Upload source package to mentors:
+
+```bash
+dput mentors ../better-raid-check_<version>_source.changes
+```

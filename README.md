@@ -17,7 +17,8 @@ Optional:
 - `raid-check-serial.service`: `systemd` oneshot unit to run the script.
 - `raid-check-serial.timer`: `systemd` timer unit that schedules checks (default: monthly).
 - `install-debian.sh`: Installs script + service on Debian and writes config file.
-- `build-deb.sh`: Builds a Debian package (`.deb`) from this repository.
+- `build-deb.sh`: Convenience wrapper around `dpkg-buildpackage`.
+- `debian/`: Standard Debian source package metadata and maintainer scripts.
 
 ## Script Behavior
 
@@ -60,7 +61,7 @@ sudo ./install-debian.sh --check-interval 2M --hdd-limit 1 --ssd-limit 1 --nvm-l
 Manual install:
 
 ```bash
-sudo install -m 0755 raid-check-serial.sh /usr/local/sbin/raid-check-serial.sh
+sudo install -m 0755 raid-check-serial.sh /usr/sbin/raid-check-serial.sh
 sudo install -m 0644 raid-check-serial.service /etc/systemd/system/raid-check-serial.service
 sudo install -m 0644 raid-check-serial.timer /etc/systemd/system/raid-check-serial.timer
 sudo systemctl daemon-reload
@@ -117,41 +118,51 @@ sudo systemctl list-timers --all | grep raid-check-serial
 Run script directly (all eligible arrays):
 
 ```bash
-sudo /usr/local/sbin/raid-check-serial.sh
+sudo /usr/sbin/raid-check-serial.sh
 ```
 
 Run script directly (specific arrays):
 
 ```bash
-sudo /usr/local/sbin/raid-check-serial.sh md0 /dev/md1
+sudo /usr/sbin/raid-check-serial.sh md0 /dev/md1
 ```
 
 Dry run:
 
 ```bash
-sudo DRY_RUN=1 /usr/local/sbin/raid-check-serial.sh
+sudo DRY_RUN=1 /usr/sbin/raid-check-serial.sh
 ```
 
 Override limits for one run:
 
 ```bash
-sudo MAX_HDD_CONCURRENT=1 MAX_SSD_CONCURRENT=2 MAX_NVM_CONCURRENT=3 /usr/local/sbin/raid-check-serial.sh
+sudo MAX_HDD_CONCURRENT=1 MAX_SSD_CONCURRENT=2 MAX_NVM_CONCURRENT=3 /usr/sbin/raid-check-serial.sh
 ```
 
 ## Build Debian Package
 
-Build a `.deb` package artifact:
+Build a binary package with standard Debian tooling:
 
 ```bash
-./build-deb.sh --version 1.0.0
+dpkg-buildpackage -us -uc -b
 ```
 
-Output will be written under `dist/`.
+Build a source package suitable for mentors:
+
+```bash
+dpkg-buildpackage -us -uc -S -sa
+```
+
+Convenience wrapper (copies artifacts to `dist/`):
+
+```bash
+./build-deb.sh
+```
 
 Install package:
 
 ```bash
-sudo dpkg -i dist/better-raid-check_<version>_all.deb
+sudo dpkg -i ../better-raid-check_<version>_all.deb
 ```
 
 During package install, interactive prompts let you set:
@@ -165,8 +176,32 @@ During package install, interactive prompts let you set:
 
 If interval is greater than 2 months (or more than 60 days), installer shows a warning and asks for confirmation before continuing.
 
+Non-interactive/upgrade behavior:
+
+- `DEBIAN_FRONTEND=noninteractive` does not force prompts.
+- Upgrades keep existing values unless you run `dpkg-reconfigure`.
+
 Re-run interactive settings later:
 
 ```bash
 sudo dpkg-reconfigure better-raid-check
+```
+
+## Debian QA Checks
+
+```bash
+lintian -iIE --pedantic ../better-raid-check_*.changes ../better-raid-check_*.dsc
+```
+
+## Publish on Salsa/Git
+
+```bash
+git remote add salsa git@salsa.debian.org:<team-or-user>/better-raid-check.git
+git push -u salsa main
+```
+
+## Upload to mentors
+
+```bash
+dput mentors ../better-raid-check_<version>_source.changes
 ```

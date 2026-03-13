@@ -1,0 +1,58 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the better-raid-check package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: better-raid-check\n"
+"Report-Msgid-Bugs-To: better-raid-check maintainers <maintainers@example.com>\n"
+"POT-Creation-Date: 2026-03-13 13:20+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ../templates:4
+msgid "RAID check interval:"
+msgstr ""
+
+#: ../templates:10
+msgid "Maximum concurrent HDD or mixed RAID checks:"
+msgstr ""
+
+#: ../templates:16
+msgid "Maximum concurrent SSD RAID checks:"
+msgstr ""
+
+#: ../templates:22
+msgid "Maximum concurrent NVM RAID checks:"
+msgstr ""
+
+#: ../templates:28
+msgid "Treat SSD and NVM as one scheduling class?"
+msgstr ""
+
+#: ../templates:34
+msgid "Poll interval in seconds:"
+msgstr ""
+
+#: ../templates:40
+msgid "Enable dry-run mode by default?"
+msgstr ""
+
+#: ../templates:46
+msgid "Disable conflicting RAID-check cron or timer jobs?"
+msgstr ""
+
+#: ../templates:52
+msgid "Start a RAID check immediately after install?"
+msgstr ""
+
+#: ../templates:58
+msgid "Keep an interval longer than two months?"
+msgstr ""

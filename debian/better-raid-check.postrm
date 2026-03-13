@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "purge" ]; then
+  rm -f /etc/default/raid-check-serial
+  rm -f /etc/systemd/system/raid-check-serial.timer.d/override.conf
+  rmdir /etc/systemd/system/raid-check-serial.timer.d 2>/dev/null || true
+fi
+
+#DEBHELPER#
+
+exit 0

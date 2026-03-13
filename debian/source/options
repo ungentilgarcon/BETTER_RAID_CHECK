@@ -1,0 +1,3 @@
+extend-diff-ignore = "(^|/)(dist/|\.git/)"
+tar-ignore = dist
+tar-ignore = .git

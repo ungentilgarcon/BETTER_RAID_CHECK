@@ -1,0 +1,31 @@
+.TH RAID-CHECK-SERIAL 8 "March 2026" "better-raid-check" "System Administration"
+.SH NAME
+raid-check-serial.sh \- run MD RAID checks with media-aware concurrency limits
+.SH SYNOPSIS
+.B raid-check-serial.sh
+.RI [ md-array " ... ]
+.SH DESCRIPTION
+.B raid-check-serial.sh
+starts MD RAID check operations with separate concurrency limits for HDD,
+SSD, and NVM-backed arrays.
+.PP
+If no array names are provided, the command auto-discovers redundant MD
+arrays and schedules checks for eligible devices.
+.SH CONFIGURATION
+Runtime options are read from
+.I /etc/default/raid-check-serial
+when invoked by systemd.
+.SH FILES
+.TP
+.I /usr/sbin/raid-check-serial.sh
+Main executable.
+.TP
+.I /usr/lib/systemd/system/raid-check-serial.service
+Systemd oneshot service unit.
+.TP
+.I /usr/lib/systemd/system/raid-check-serial.timer
+Systemd timer unit for scheduled runs.
+.SH SEE ALSO
+.BR mdadm (8),
+.BR systemd.service (5),
+.BR systemd.timer (5)

@@ -1,0 +1,7 @@
+better-raid-check (1.0.0) unstable; urgency=medium
+
+  * Convert packaging to standard Debian source layout.
+  * Add debconf-driven configuration with noninteractive-safe defaults.
+  * Package service/timer via debhelper.
+
+ -- better-raid-check maintainers <maintainers@example.com>  Fri, 13 Mar 2026 12:00:00 +0000

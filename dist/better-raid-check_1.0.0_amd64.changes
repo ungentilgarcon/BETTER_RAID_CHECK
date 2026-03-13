@@ -1,0 +1,27 @@
+Format: 1.8
+Date: Fri, 13 Mar 2026 12:00:00 +0000
+Source: better-raid-check
+Binary: better-raid-check
+Architecture: all
+Version: 1.0.0
+Distribution: unstable
+Urgency: medium
+Maintainer: better-raid-check maintainers <maintainers@example.com>
+Changed-By: better-raid-check maintainers <maintainers@example.com>
+Description:
+ better-raid-check - Media-aware MD RAID check scheduler with per-class concurrency
+Changes:
+ better-raid-check (1.0.0) unstable; urgency=medium
+ .
+   * Convert packaging to standard Debian source layout.
+   * Add debconf-driven configuration with noninteractive-safe defaults.
+   * Package service/timer via debhelper.
+Checksums-Sha1:
+ 2fab0ab06ebcaa8acee5d233b8f9766c0ba67b34 12824 better-raid-check_1.0.0_all.deb
+ 0acb794c059f917b021ec6ec5080c14f94fcea29 5599 better-raid-check_1.0.0_amd64.buildinfo
+Checksums-Sha256:
+ cdd9d6f8a804bf5a3e9acb75dfe987516add56678648e90fc8c2ad88a3068927 12824 better-raid-check_1.0.0_all.deb
+ 09f00d3f3c6f80faac5e8d6f142fa86a4cbd0881eff65eb1167777064f5ad0bd 5599 better-raid-check_1.0.0_amd64.buildinfo
+Files:
+ d3a9d0d14f4176a934ba45f857a8d5ac 12824 admin optional better-raid-check_1.0.0_all.deb
+ 5172d45f2ee4536b67a1cdf0b8ee04d6 5599 admin optional better-raid-check_1.0.0_amd64.buildinfo

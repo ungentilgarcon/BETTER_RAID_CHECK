@@ -1,0 +1,27 @@
+Format: 1.8
+Date: Fri, 13 Mar 2026 12:00:00 +0000
+Source: better-raid-check
+Architecture: source
+Version: 1.0.0
+Distribution: unstable
+Urgency: medium
+Maintainer: better-raid-check maintainers <maintainers@example.com>
+Changed-By: better-raid-check maintainers <maintainers@example.com>
+Changes:
+ better-raid-check (1.0.0) unstable; urgency=medium
+ .
+   * Convert packaging to standard Debian source layout.
+   * Add debconf-driven configuration with noninteractive-safe defaults.
+   * Package service/timer via debhelper.
+Checksums-Sha1:
+ a4637b9622989a4ba809130a3969291ba410b0f2 605 better-raid-check_1.0.0.dsc
+ 27bfb937914e9c493ecf0288390447f39d4d45fd 12416 better-raid-check_1.0.0.tar.xz
+ 1b9b8c29aa1c437819b68f405041380f8cfb036c 5558 better-raid-check_1.0.0_source.buildinfo
+Checksums-Sha256:
+ b6161dd5cd5f3654952978871a9856b42872e4b52540fa467e7deba93dcf7b1a 605 better-raid-check_1.0.0.dsc
+ a66beee0c5f50f11b9d63e9b10b5d1b3ea3cb8e731bf3ee7b64c89d010d82405 12416 better-raid-check_1.0.0.tar.xz
+ 241896113ac5f1424ea9cf585466b8303886e53086d9b484ad01f0ed65f8d63f 5558 better-raid-check_1.0.0_source.buildinfo
+Files:
+ 7720ce27210c9e4fcb3e9e38afe4926f 605 admin optional better-raid-check_1.0.0.dsc
+ 8f0f1e84855bd2f58ae9a39949056343 12416 admin optional better-raid-check_1.0.0.tar.xz
+ 90c22ee155a1a7771585bab3b37036d5 5558 admin optional better-raid-check_1.0.0_source.buildinfo
