@@ -147,3 +147,26 @@ Build a `.deb` package artifact:
 ```
 
 Output will be written under `dist/`.
+
+Install package:
+
+```bash
+sudo dpkg -i dist/better-raid-check_<version>_all.deb
+```
+
+During package install, interactive prompts let you set:
+
+- Check interval (`Xd` or `XM`)
+- Concurrent checks for `HDD`, `SSD`, `NVM`
+- `MERGE_SSD_NVM_CLASSES`
+- `SLEEP_SECS`, `DRY_RUN`
+- Whether to disable conflicting schedulers
+- Whether to start a check immediately
+
+If interval is greater than 2 months (or more than 60 days), installer shows a warning and asks for confirmation before continuing.
+
+Re-run interactive settings later:
+
+```bash
+sudo dpkg-reconfigure better-raid-check
+```

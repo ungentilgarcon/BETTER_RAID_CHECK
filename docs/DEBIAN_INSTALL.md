@@ -109,3 +109,39 @@ Build a `.deb` artifact from this repository:
 ```
 
 The package is created under `dist/`.
+
+Install it:
+
+```bash
+sudo dpkg -i dist/better-raid-check_<version>_all.deb
+```
+
+## Interactive Package Configuration
+
+When installing the `.deb`, `debconf` prompts for settings interactively:
+
+- `check_interval` (`Xd` or `XM`)
+- `MAX_HDD_CONCURRENT`, `MAX_SSD_CONCURRENT`, `MAX_NVM_CONCURRENT`
+- `MERGE_SSD_NVM_CLASSES`
+- `SLEEP_SECS`, `DRY_RUN`
+- Disable conflicting cron/timer RAID checks
+- Start a check immediately
+
+Safety warning:
+
+- If interval is longer than 2 months (or more than 60 days), install shows a confirmation question before proceeding.
+
+Non-interactive installs:
+
+- If `DEBIAN_FRONTEND=noninteractive` is used, package defaults are applied unless preseeds are provided.
+
+Reconfigure later:
+
+```bash
+sudo dpkg-reconfigure better-raid-check
+```
+
+## Licensing
+
+- Package includes GPL-3+ licensing metadata in `/usr/share/doc/better-raid-check/copyright`.
+- `LICENSE` is installed under `/usr/share/doc/better-raid-check/LICENSE`.
