@@ -1,6 +1,7 @@
 # RAID Check (Bounded Concurrency)
 
 This setup runs Linux MD RAID `check` operations with configurable, media-aware concurrency limits:
+Default check policy was too aggressive for my setup so I implmented this in a way that is less sollicitating for the small PCIE X1 card I use for hdds.
 
 - `MAX_HDD_CONCURRENT` for HDD and mixed arrays
 - `MAX_SSD_CONCURRENT` for SATA/SAS SSD arrays
