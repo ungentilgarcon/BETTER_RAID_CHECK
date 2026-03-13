@@ -2,15 +2,20 @@
 set -euo pipefail
 
 # Per-class concurrency policy (override with environment variables):
-# - MAX_ROTATIONAL_CONCURRENT
+# - MAX_HDD_CONCURRENT
 # - MAX_SSD_CONCURRENT
-# - MAX_NVME_CONCURRENT
+# - MAX_NVM_CONCURRENT
+#
+# Backward-compatible aliases:
+# - MAX_ROTATIONAL_CONCURRENT -> MAX_HDD_CONCURRENT
+# - MAX_NVME_CONCURRENT -> MAX_NVM_CONCURRENT
 
 SLEEP_SECS="${SLEEP_SECS:-20}"
 DRY_RUN="${DRY_RUN:-0}"
-MAX_ROTATIONAL_CONCURRENT="${MAX_ROTATIONAL_CONCURRENT:-1}"
+MAX_HDD_CONCURRENT="${MAX_HDD_CONCURRENT:-${MAX_ROTATIONAL_CONCURRENT:-1}}"
 MAX_SSD_CONCURRENT="${MAX_SSD_CONCURRENT:-1}"
-MAX_NVME_CONCURRENT="${MAX_NVME_CONCURRENT:-1}"
+MAX_NVM_CONCURRENT="${MAX_NVM_CONCURRENT:-${MAX_NVME_CONCURRENT:-1}}"
+MERGE_SSD_NVM_CLASSES="${MERGE_SSD_NVM_CLASSES:-0}"
 
 is_non_negative_int() {
   [[ "$1" =~ ^[0-9]+$ ]]
@@ -23,7 +28,7 @@ is_positive_int() {
 validate_settings() {
   local var value
 
-  for var in MAX_ROTATIONAL_CONCURRENT MAX_SSD_CONCURRENT MAX_NVME_CONCURRENT; do
+  for var in MAX_HDD_CONCURRENT MAX_SSD_CONCURRENT MAX_NVM_CONCURRENT; do
     value="${!var}"
     if ! is_non_negative_int "$value"; then
       echo "Invalid $var: $value (expected non-negative integer)" >&2
@@ -38,6 +43,11 @@ validate_settings() {
 
   if [[ "$DRY_RUN" != "0" && "$DRY_RUN" != "1" ]]; then
     echo "Invalid DRY_RUN: $DRY_RUN (expected 0 or 1)" >&2
+    exit 1
+  fi
+
+  if [[ "$MERGE_SSD_NVM_CLASSES" != "0" && "$MERGE_SSD_NVM_CLASSES" != "1" ]]; then
+    echo "Invalid MERGE_SSD_NVM_CLASSES: $MERGE_SSD_NVM_CLASSES (expected 0 or 1)" >&2
     exit 1
   fi
 }
@@ -76,9 +86,9 @@ discover_redundant_arrays() {
 
 classify_md() {
   local md="$1"
-  local has_rot=0
+  local has_hdd=0
   local has_ssd=0
-  local has_nvme=0
+  local has_nvm=0
   local slave base rot
 
   for slave_path in /sys/block/"$md"/slaves/*; do
@@ -88,28 +98,32 @@ classify_md() {
     if [[ -r /sys/block/"$base"/queue/rotational ]]; then
       rot="$(<"/sys/block/$base/queue/rotational")"
       if [[ "$rot" == "1" ]]; then
-        has_rot=1
+        has_hdd=1
       else
         case "$base" in
-          nvme*) has_nvme=1 ;;
+          nvme*) has_nvm=1 ;;
           *) has_ssd=1 ;;
         esac
       fi
     else
       # Unknown media type: treat as rotational to keep policy conservative.
-      has_rot=1
+      has_hdd=1
     fi
   done
 
-  # Conservative precedence for mixed members: rotational > ssd > nvme.
-  if (( has_rot == 1 )); then
-    printf '%s\n' rotational
+  # Conservative precedence for mixed members (slowest wins): hdd > ssd > nvm.
+  if (( has_hdd == 1 )); then
+    printf '%s\n' hdd
   elif (( has_ssd == 1 )); then
     printf '%s\n' ssd
-  elif (( has_nvme == 1 )); then
-    printf '%s\n' nvme
+  elif (( has_nvm == 1 )); then
+    if [[ "$MERGE_SSD_NVM_CLASSES" == "1" ]]; then
+      printf '%s\n' ssd
+    else
+      printf '%s\n' nvm
+    fi
   else
-    printf '%s\n' rotational
+    printf '%s\n' hdd
   fi
 }
 
@@ -215,26 +229,26 @@ print_running_progress() {
 }
 
 has_remaining_work() {
-  local -n q_rot="$1"
+  local -n q_hdd="$1"
   local -n q_ssd="$2"
-  local -n q_nvme="$3"
-  local -n r_rot="$4"
+  local -n q_nvm="$3"
+  local -n r_hdd="$4"
   local -n r_ssd="$5"
-  local -n r_nvme="$6"
+  local -n r_nvm="$6"
 
-  (( ${#q_rot[@]} > 0 || ${#q_ssd[@]} > 0 || ${#q_nvme[@]} > 0 || \
-     ${#r_rot[@]} > 0 || ${#r_ssd[@]} > 0 || ${#r_nvme[@]} > 0 ))
+  (( ${#q_hdd[@]} > 0 || ${#q_ssd[@]} > 0 || ${#q_nvm[@]} > 0 || \
+     ${#r_hdd[@]} > 0 || ${#r_ssd[@]} > 0 || ${#r_nvm[@]} > 0 ))
 }
 
 main() {
   local -a requested=()
   local -a clean_arrays=()
-  local -a rotational_queue=()
+  local -a hdd_queue=()
   local -a ssd_queue=()
-  local -a nvme_queue=()
-  local -a rotational_running=()
+  local -a nvm_queue=()
+  local -a hdd_running=()
   local -a ssd_running=()
-  local -a nvme_running=()
+  local -a nvm_running=()
   local -a skipped_arrays=()
   local md class
 
@@ -269,29 +283,29 @@ main() {
   for md in "${clean_arrays[@]}"; do
     class="$(classify_md "$md")"
     case "$class" in
-      rotational)
-        rotational_queue+=("$md")
-        echo "  $md -> rotational"
+      hdd)
+        hdd_queue+=("$md")
+        echo "  $md -> hdd"
         ;;
       ssd)
         ssd_queue+=("$md")
         echo "  $md -> ssd"
         ;;
-      nvme)
-        nvme_queue+=("$md")
-        echo "  $md -> nvme"
+      nvm)
+        nvm_queue+=("$md")
+        echo "  $md -> nvm"
         ;;
       *)
-        rotational_queue+=("$md")
-        echo "  $md -> unknown (treated as rotational)"
+        hdd_queue+=("$md")
+        echo "  $md -> unknown (treated as hdd)"
         ;;
     esac
   done
 
-  if (( MAX_ROTATIONAL_CONCURRENT == 0 && ${#rotational_queue[@]} > 0 )); then
-    echo "Skipping rotational arrays because MAX_ROTATIONAL_CONCURRENT=0"
-    skipped_arrays+=("${rotational_queue[@]}")
-    rotational_queue=()
+  if (( MAX_HDD_CONCURRENT == 0 && ${#hdd_queue[@]} > 0 )); then
+    echo "Skipping hdd arrays because MAX_HDD_CONCURRENT=0"
+    skipped_arrays+=("${hdd_queue[@]}")
+    hdd_queue=()
   fi
 
   if (( MAX_SSD_CONCURRENT == 0 && ${#ssd_queue[@]} > 0 )); then
@@ -300,26 +314,26 @@ main() {
     ssd_queue=()
   fi
 
-  if (( MAX_NVME_CONCURRENT == 0 && ${#nvme_queue[@]} > 0 )); then
-    echo "Skipping nvme arrays because MAX_NVME_CONCURRENT=0"
-    skipped_arrays+=("${nvme_queue[@]}")
-    nvme_queue=()
+  if (( MAX_NVM_CONCURRENT == 0 && ${#nvm_queue[@]} > 0 )); then
+    echo "Skipping nvm arrays because MAX_NVM_CONCURRENT=0"
+    skipped_arrays+=("${nvm_queue[@]}")
+    nvm_queue=()
   fi
 
-  while has_remaining_work rotational_queue ssd_queue nvme_queue rotational_running ssd_running nvme_running; do
-    reap_finished rotational_running rotational
+  while has_remaining_work hdd_queue ssd_queue nvm_queue hdd_running ssd_running nvm_running; do
+    reap_finished hdd_running hdd
     reap_finished ssd_running ssd
-    reap_finished nvme_running nvme
+    reap_finished nvm_running nvm
 
-    launch_for_class rotational_queue rotational_running "$MAX_ROTATIONAL_CONCURRENT" rotational
+    launch_for_class hdd_queue hdd_running "$MAX_HDD_CONCURRENT" hdd
     launch_for_class ssd_queue ssd_running "$MAX_SSD_CONCURRENT" ssd
-    launch_for_class nvme_queue nvme_running "$MAX_NVME_CONCURRENT" nvme
+    launch_for_class nvm_queue nvm_running "$MAX_NVM_CONCURRENT" nvm
 
-    print_running_progress rotational_running
+    print_running_progress hdd_running
     print_running_progress ssd_running
-    print_running_progress nvme_running
+    print_running_progress nvm_running
 
-    if has_remaining_work rotational_queue ssd_queue nvme_queue rotational_running ssd_running nvme_running; then
+    if has_remaining_work hdd_queue ssd_queue nvm_queue hdd_running ssd_running nvm_running; then
       sleep "$SLEEP_SECS"
     fi
   done
@@ -328,7 +342,7 @@ main() {
     echo "Skipped arrays: ${skipped_arrays[*]}"
   fi
 
-  echo "All queued RAID checks completed (limits: rotational=$MAX_ROTATIONAL_CONCURRENT, ssd=$MAX_SSD_CONCURRENT, nvme=$MAX_NVME_CONCURRENT)."
+  echo "All queued RAID checks completed (limits: hdd=$MAX_HDD_CONCURRENT, ssd=$MAX_SSD_CONCURRENT, nvm=$MAX_NVM_CONCURRENT)."
 }
 
 main "$@"
