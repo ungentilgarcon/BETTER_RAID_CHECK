@@ -5,12 +5,14 @@ usage() {
   cat <<'EOF'
 Usage: install-debian.sh [options]
 
-Install RAID check script and systemd unit on Debian.
+Install RAID check script and systemd units on Debian.
 
 Options:
   --hdd-limit N          Max concurrent HDD/mixed array checks (default: 1)
   --ssd-limit N          Max concurrent SSD array checks (default: 1)
   --nvm-limit N          Max concurrent NVM (NVMe) array checks (default: 1)
+  --check-interval Xd|XM Schedule check interval (default: 1M)
+                        Examples: 30d, 60d, 1M, 2M
   --merge-ssd-nvm 0|1    Treat SSD and NVM as one class (default: 0)
   --rotational-limit N   Alias for --hdd-limit
   --nvme-limit N         Alias for --nvm-limit
@@ -30,9 +32,74 @@ is_positive_int() {
   [[ "$1" =~ ^[1-9][0-9]*$ ]]
 }
 
+is_interval_spec() {
+  [[ "$1" =~ ^[1-9][0-9]*[dM]$ ]]
+}
+
+month_list_for_step() {
+  local step="$1"
+  local m list=""
+  for ((m=1; m<=12; m+=step)); do
+    list+="$(printf '%02d' "$m"),"
+  done
+  printf '%s\n' "${list%,}"
+}
+
+write_timer_override() {
+  local interval="$1"
+  local timer_override_dir="$2"
+  local timer_override_file="$3"
+  local count unit month_list
+
+  count="${interval%[dM]}"
+  unit="${interval: -1}"
+
+  mkdir -p "$timer_override_dir"
+
+  if [[ "$unit" == "d" ]]; then
+    cat > "$timer_override_file" <<EOF
+[Timer]
+OnCalendar=
+OnUnitActiveSec=${count}d
+OnBootSec=15min
+EOF
+    return 0
+  fi
+
+  if [[ "$count" == "1" ]]; then
+    cat > "$timer_override_file" <<'EOF'
+[Timer]
+OnUnitActiveSec=
+OnCalendar=
+OnCalendar=monthly
+EOF
+    return 0
+  fi
+
+  if (( count >= 2 && count <= 12 )); then
+    month_list="$(month_list_for_step "$count")"
+    cat > "$timer_override_file" <<EOF
+[Timer]
+OnUnitActiveSec=
+OnCalendar=
+OnCalendar=*-${month_list}-01 03:00:00
+EOF
+    return 0
+  fi
+
+  # Large month intervals fallback to monotonic timer.
+  cat > "$timer_override_file" <<EOF
+[Timer]
+OnCalendar=
+OnUnitActiveSec=${count}month
+OnBootSec=15min
+EOF
+}
+
 HDD_LIMIT=1
 SSD_LIMIT=1
 NVM_LIMIT=1
+CHECK_INTERVAL="1M"
 MERGE_SSD_NVM=0
 SLEEP_SECS=20
 DRY_RUN=0
@@ -59,6 +126,10 @@ while (( $# > 0 )); do
       ;;
     --nvm-limit)
       NVM_LIMIT="${2:-}"
+      shift 2
+      ;;
+    --check-interval)
+      CHECK_INTERVAL="${2:-}"
       shift 2
       ;;
     --merge-ssd-nvm)
@@ -121,11 +192,20 @@ if [[ "$MERGE_SSD_NVM" != "0" && "$MERGE_SSD_NVM" != "1" ]]; then
   exit 1
 fi
 
+if ! is_interval_spec "$CHECK_INTERVAL"; then
+  echo "Invalid CHECK_INTERVAL: $CHECK_INTERVAL (expected Xd or XM, e.g. 60d or 2M)" >&2
+  exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC_SCRIPT="$SCRIPT_DIR/raid-check-serial.sh"
 SRC_UNIT="$SCRIPT_DIR/raid-check-serial.service"
+SRC_TIMER="$SCRIPT_DIR/raid-check-serial.timer"
 DST_SCRIPT="/usr/local/sbin/raid-check-serial.sh"
 DST_UNIT="/etc/systemd/system/raid-check-serial.service"
+DST_TIMER="/etc/systemd/system/raid-check-serial.timer"
+TIMER_OVERRIDE_DIR="/etc/systemd/system/raid-check-serial.timer.d"
+TIMER_OVERRIDE_FILE="$TIMER_OVERRIDE_DIR/override.conf"
 ENV_FILE="/etc/default/raid-check-serial"
 
 disable_conflicting_systemd_timers() {
@@ -194,13 +274,21 @@ disable_conflicting_cron_jobs() {
   done
 }
 
-if [[ ! -f "$SRC_SCRIPT" || ! -f "$SRC_UNIT" ]]; then
-  echo "Expected files not found next to installer: raid-check-serial.sh and raid-check-serial.service" >&2
+if [[ ! -f "$SRC_SCRIPT" || ! -f "$SRC_UNIT" || ! -f "$SRC_TIMER" ]]; then
+  echo "Expected files not found next to installer: raid-check-serial.sh, raid-check-serial.service, raid-check-serial.timer" >&2
   exit 1
 fi
 
 install -m 0755 "$SRC_SCRIPT" "$DST_SCRIPT"
 install -m 0644 "$SRC_UNIT" "$DST_UNIT"
+install -m 0644 "$SRC_TIMER" "$DST_TIMER"
+
+if [[ "$CHECK_INTERVAL" == "1M" ]]; then
+  rm -f "$TIMER_OVERRIDE_FILE"
+  rmdir "$TIMER_OVERRIDE_DIR" 2>/dev/null || true
+else
+  write_timer_override "$CHECK_INTERVAL" "$TIMER_OVERRIDE_DIR" "$TIMER_OVERRIDE_FILE"
+fi
 
 cat > "$ENV_FILE" <<EOF
 SLEEP_SECS=$SLEEP_SECS
@@ -220,23 +308,27 @@ if (( DISABLE_CONFLICTS == 1 )); then
 fi
 
 systemctl daemon-reload
+systemctl enable --now raid-check-serial.timer
 
 if (( START_NOW == 1 )); then
-  systemctl start raid-check-serial.service
+  systemctl start --no-block raid-check-serial.service
 fi
 
 echo "Installed: $DST_SCRIPT"
 echo "Installed: $DST_UNIT"
+echo "Installed: $DST_TIMER"
 echo "Wrote config: $ENV_FILE"
 echo "Limits: hdd=$HDD_LIMIT ssd=$SSD_LIMIT nvm=$NVM_LIMIT"
 echo "Merge SSD+NVM classes: $MERGE_SSD_NVM"
+echo "Check interval: $CHECK_INTERVAL"
 if (( DISABLE_CONFLICTS == 1 )); then
   echo "Conflicting cron/timer RAID checks were disabled and masked when detected."
 else
   echo "Conflicting cron/timer RAID checks were not modified (--skip-conflict-disable)."
 fi
+echo "Timer enabled: raid-check-serial.timer"
 if (( START_NOW == 1 )); then
   echo "Service started: raid-check-serial.service"
 else
-  echo "Start with: systemctl start raid-check-serial.service"
+  echo "Start now with: systemctl start --no-block raid-check-serial.service"
 fi

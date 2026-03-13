@@ -1,6 +1,7 @@
 # Debian Install Guide
 
 This guide installs the RAID checker as a `systemd` oneshot service and configures concurrency limits per media class.
+It also configures a `systemd` timer schedule (default: monthly).
 
 ## Requirements
 
@@ -15,6 +16,12 @@ From the project directory:
 sudo ./install-debian.sh --hdd-limit 1 --ssd-limit 1 --nvm-limit 2
 ```
 
+Bimonthly example (every 2 months):
+
+```bash
+sudo ./install-debian.sh --check-interval 2M --hdd-limit 1 --ssd-limit 1 --nvm-limit 2
+```
+
 Optional immediate run:
 
 ```bash
@@ -26,6 +33,7 @@ sudo ./install-debian.sh --hdd-limit 1 --ssd-limit 1 --nvm-limit 2 --start-now
 - `--hdd-limit N`: Max concurrent checks for HDD/mixed arrays.
 - `--ssd-limit N`: Max concurrent checks for SSD arrays.
 - `--nvm-limit N`: Max concurrent checks for NVM (NVMe) arrays.
+- `--check-interval Xd|XM`: Schedule interval for timer checks (default `1M`).
 - `--merge-ssd-nvm 0|1`: Treat SSD and NVM as one scheduling class.
 - `--rotational-limit N`: Alias for `--hdd-limit`.
 - `--nvme-limit N`: Alias for `--nvm-limit`.
@@ -33,6 +41,13 @@ sudo ./install-debian.sh --hdd-limit 1 --ssd-limit 1 --nvm-limit 2 --start-now
 - `--dry-run 0|1`: Default dry-run mode in config file.
 - `--skip-conflict-disable`: Keep existing cron/timer RAID checks enabled.
 - `--start-now`: Start service after installation.
+
+Interval examples:
+
+- `30d`: every 30 days
+- `60d`: every 60 days
+- `1M`: monthly (default)
+- `2M`: every 2 months
 
 ## Config File
 
@@ -51,6 +66,17 @@ You can edit this file later and run:
 
 ```bash
 sudo systemctl daemon-reload
+```
+
+## Timer Status
+
+Installer enables `raid-check-serial.timer` automatically.
+
+Check timer schedule:
+
+```bash
+sudo systemctl cat raid-check-serial.timer
+sudo systemctl list-timers --all | grep raid-check-serial
 ```
 
 ## Run and Check
@@ -73,3 +99,13 @@ sudo systemctl status raid-check-serial.service
 - If an array has any rotational member, it is treated as `hdd`.
 - Mixed non-rotational arrays (SSD + NVMe) are treated as `ssd` for conservative scheduling.
 - Installer disables and masks conflicting RAID-check timers and cron entries by default.
+
+## Build a Debian Package
+
+Build a `.deb` artifact from this repository:
+
+```bash
+./build-deb.sh --version 1.0.0
+```
+
+The package is created under `dist/`.

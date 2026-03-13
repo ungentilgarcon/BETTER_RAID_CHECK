@@ -15,7 +15,9 @@ Optional:
 
 - `raid-check-serial.sh`: Orchestrates queueing, media classification, and check execution.
 - `raid-check-serial.service`: `systemd` oneshot unit to run the script.
+- `raid-check-serial.timer`: `systemd` timer unit that schedules checks (default: monthly).
 - `install-debian.sh`: Installs script + service on Debian and writes config file.
+- `build-deb.sh`: Builds a Debian package (`.deb`) from this repository.
 
 ## Script Behavior
 
@@ -32,7 +34,14 @@ Scheduler safety:
 
 - Installer disables and masks conflicting RAID-check `systemd` timers (for example `mdcheck_*` and similar check/scrub timers).
 - Installer disables conflicting cron/anacron RAID-check entries and files.
+- Installer enables `raid-check-serial.timer` by default.
 - Polls until running checks complete, then starts additional queued arrays when slots are available.
+
+Schedule policy:
+
+- Default schedule is monthly (`--check-interval 1M`).
+- You can set custom interval with `--check-interval Xd|XM`.
+- Examples: `30d`, `60d`, `1M`, `2M`.
 
 ## Install
 
@@ -42,12 +51,20 @@ Debian helper (recommended):
 sudo ./install-debian.sh --hdd-limit 1 --ssd-limit 1 --nvm-limit 2
 ```
 
+Install with checks every 2 months:
+
+```bash
+sudo ./install-debian.sh --check-interval 2M --hdd-limit 1 --ssd-limit 1 --nvm-limit 2
+```
+
 Manual install:
 
 ```bash
 sudo install -m 0755 raid-check-serial.sh /usr/local/sbin/raid-check-serial.sh
 sudo install -m 0644 raid-check-serial.service /etc/systemd/system/raid-check-serial.service
+sudo install -m 0644 raid-check-serial.timer /etc/systemd/system/raid-check-serial.timer
 sudo systemctl daemon-reload
+sudo systemctl enable --now raid-check-serial.timer
 ```
 
 ## Optional Runtime Config
@@ -90,6 +107,13 @@ sudo systemctl start raid-check-serial.service
 sudo systemctl status raid-check-serial.service
 ```
 
+Check scheduled timer:
+
+```bash
+sudo systemctl status raid-check-serial.timer
+sudo systemctl list-timers --all | grep raid-check-serial
+```
+
 Run script directly (all eligible arrays):
 
 ```bash
@@ -113,3 +137,13 @@ Override limits for one run:
 ```bash
 sudo MAX_HDD_CONCURRENT=1 MAX_SSD_CONCURRENT=2 MAX_NVM_CONCURRENT=3 /usr/local/sbin/raid-check-serial.sh
 ```
+
+## Build Debian Package
+
+Build a `.deb` package artifact:
+
+```bash
+./build-deb.sh --version 1.0.0
+```
+
+Output will be written under `dist/`.
